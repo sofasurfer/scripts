@@ -1,0 +1,156 @@
+#!/bin/bash
+
+prepare () {
+	if [ -d "$1" -a -f "$1/00001.ts" ] ; then
+		INFILE="$1/00001.ts"
+		TITLE=`cat "$1/info" |grep "^T" |sed -e 's/^T \(.*\)/\1/'`
+	else
+		INFILE="$1"
+		TITLE=`basename "$1" |sed -e 's/\(.*\)\.[^\.]\+/\1/'`
+	fi
+	TMPFILE="/tmp/$TITLE.mkv"
+	OUTFILE="$2/$TITLE.mkv"
+}
+
+convert_input () {
+	AC3=`avconv -i "$INFILE" 2>&1 |grep "Stream " |grep "ac3" |sed -e 's/.*#0.\([0-9]\).*/\1/'`
+	if [ ! -z "$AC3" ] ; then
+		AUDIO="-a $AC3 -E copy -6 auto"
+	else
+		MP2=`avconv -i "$INFILE" 2>&1 |grep "Audio: mp2" |wc -l`
+		if [ $MP2 -ge 1 ] ; then
+			AUDIO="-a 1 -E lame"
+		else
+			AUDIO="-a 1 -E copy -6 auto"
+		fi
+	fi
+
+	if [ ! -z "$LOGFILE" ] ; then
+		echo "/usr/bin/HandBrakeCLI -Z \"High Profile\" -i \"$INFILE\" --previews 30:0  -o \"$OUTFILE\" $AUDIO -f mkv > \"$PROGRESS\"" >> "$LOGFILE"
+		[ -z "$DRY" ] && nice -n 19 /usr/bin/HandBrakeCLI -Z "High Profile" -i "$INFILE" --previews 30:0  -o "$TMPFILE" $AUDIO -f mkv > "$PROGRESS" 2>> "$LOGFILE"
+	else
+		[ ! -z "$DRY" ] && echo "/usr/bin/HandBrakeCLI -Z \"High Profile\" -i \"$INFILE\" --previews 30:0  -o \"$OUTFILE\" $AUDIO -f mkv"
+		[ -z "$DRY" ] && nice -n 19 /usr/bin/HandBrakeCLI -Z "High Profile" -i "$INFILE" --previews 30:0  -o "$TMPFILE" $AUDIO -f mkv
+	fi
+	# Compare hours and minutes (ignore seconds, since its too inaccurate)
+	DURATION_IN=`avconv -i "$INFILE" 2>&1 |grep "Duration:" |sed -e 's/.*Duration: \([0-9]\+:[0-9]\+\).*/\1/'`
+	DURATION_OUT=`avconv -i "$TMPFILE" 2>&1 |grep "Duration:" |sed -e 's/.*Duration: \([0-9]\+:[0-9]\+\).*/\1/'`
+	if [ "$DURATION_IN" = "$DURATION_OUT" ] ; then
+		mv "$TMPFILE" "$OUTFILE"
+		if [ ! -z "$OWNER" ] ; then
+			chown "$OWNER" "$OUTFILE"
+		fi
+	fi
+	if [ -f "$PROGRESS" ] ; then
+		rm "$PROGRESS"
+	fi
+	/usr/bin/logger "Converted $INFILE to $OUTFILE"
+}
+
+process_file () {
+	prepare "$1" "$2"
+	if [ ! -f "$TMPFILE" -a ! -f "$OUTFILE" ] ; then
+		convert_input
+	else
+		echo "Skipping existing $OUTFILE"
+	fi
+}
+
+run_from_cmdline () {
+	if [ -f "$1" ] ; then
+		process_file "$1" "$2"
+	else
+		for TYPE in avi mpg mpeg mp4; do
+			find "$1" -name "*.$TYPE" | while read VID ; do
+				process_file "$VID" "$2"
+			done
+		done
+	fi
+}
+
+run_from_cron () {
+	for TRY in $1 ; do
+		# Skip VDR deleted recordings
+		DEL=`echo $TRY |sed -e 's/.*\(\.del\)/\1/'`
+		if [ "$DEL" != ".del" ] ; then
+			prepare $TRY $2
+			if [ -f "$INFILE" ] ; then
+				NOW=`date +%s`
+				LAST=`stat -c %Y $INFILE`
+				LAST=`expr \( $NOW - $LAST \) / 60`
+				if [ $LAST -ge 5 -a ! -f "$TMPFILE" -a ! -f "$OUTFILE" ] ; then
+					convert_input
+				fi
+			fi
+		fi
+	done
+}
+
+LOGFILE="/var/log/handbrake-convert.log"
+PROGRESS="/tmp/handbrake-progress.log"
+RUNNING="/tmp/handbrake.running"
+DRY=""
+VDR=false
+
+while true ; do
+	case $1 in
+		--dry-run)
+			DRY="$1"
+		;;
+		-m)
+			shift
+			MODE="$1"
+		;;
+		-i)
+			shift
+			IN="$1"
+		;;
+		-o)
+			shift
+			OUT="$1"
+		;;
+		-u)
+			shift
+			OWNER="$1"
+		;;
+		-vdr)
+			VDR=true
+		;;
+	esac
+	shift || break
+done
+
+if [ "$VDR" == "false" ] ; then
+	#IN="`echo $IN/*/*`"
+	echo "Skip VDR"
+fi
+
+if [ ! -f $RUNNING -o ! -z "$DRY" ] ; then
+	case "$MODE" in
+		cmdline)
+			[ -z "$DRY" ] && touch $RUNNING
+			LOGFILE=""
+			run_from_cmdline "$IN" "$OUT"
+			[ -z "$DRY" ] && rm $RUNNING
+		;;
+		cron)
+			[ -z "$DRY" ] && touch $RUNNING
+			run_from_cron "$IN" "$OUT"
+			[ -z "$DRY" ] && rm $RUNNING
+		;;
+		*)
+			echo -e "Unknown mode: $MODE\n\n"
+			echo -e "Usage: $0\n"
+			echo -e "\t-m <mode>"
+			echo -e "\t\tcmdline"
+			echo -e "\t\tcron"
+			echo -e "\t-i <input>"
+			echo -e "\t-o <output>"
+			echo -e "\t-u <owner>"
+			echo -e "\t-vdr"
+			echo -e "\t--dry-run"
+			echo
+			exit 1
+		;;
+	esac
+fi
