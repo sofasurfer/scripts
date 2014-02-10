@@ -36,18 +36,19 @@ else
 fi
 [ ! -d $BACKUP ] && mkdir -p $BACKUP || :
 
+
 ### Start general Backup ###
 if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; then
 	for FOLDER in $DATADIRS
 	do
-    		FILE="$BACKUP/data-$(basename $FOLDER).tar.bz2"
-    		tar -jcf $FILE $FOLDER
-    		echo $FILE
-
+    	FILE="$BACKUP/data-$(basename $FOLDER).tar.bz2"
+    	tar -jcf $FILE $FOLDER
+    	echo $FILE
 	done
 else
 	echo "Ignore datadir"
 fi
+
 
 ### Start MySQL Backup ###
 echo "Start Backup:$BACKUP"
@@ -63,32 +64,32 @@ do
 	rm $FILE
 done
 
+
 ### Start WWW Backup ###
 ### See if we want to make a full backup ###
 for FOLDER in $WEBDIR/*;
 do
 	PATHNAME=$(basename "$FOLDER")
-        if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; 
-        then
+    if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; 
+    then
 
-                FILE="$BACKUP/www-$PATHNAME-full.tar.bz2"
-                tar -jcf $FILE $FOLDER
+        FILE="$BACKUP/www-$PATHNAME-full.tar.bz2"
+        tar -jcf $FILE $FOLDER
 
-        else
+    else
 
-                FILE="$BACKUP/www-$PATHNAME-incremental.tar.bz2"
-                tar -g "$INCFILE-$PATHNAME" -jcf $FILE $FOLDER
+        FILE="$BACKUP/www-$PATHNAME-incremental.tar.bz2"
+        tar -g "$INCFILE-$PATHNAME" -jcf $FILE $FOLDER
 
-        fi
-        echo "Backup $FOLDER \t->\t $FILE"
+    fi
+    echo "Backup $FOLDER \t->\t $FILE"
 done
-
-### Start config backup ###
 
 
 
 ### delete old backup directories ###
 find "$BACKUPDIR/" -ctime +1 -delete
+
 
 ### Upload to S3 ###
 if [ "$S3CONFIG" = "false" ]; 
