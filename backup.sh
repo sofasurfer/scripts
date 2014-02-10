@@ -3,23 +3,22 @@
 # ---------------------------------------------------------------------
 
 ### System Setup ###
-HOMEDIRS="/home/kib/Documents/ /home/kib/Pictures/ /home/kib/Projects/"
-##DIRS="/var/www/ /var/log/ /etc/"
+DATADIRS="/var/log/ /etc/"
 WEBDIR="/var/www"
 INCFILE="/root/tar-inc-backup"
-SUBDIR=$(date +"%Y-%m")
+YEAR=$(date +"%Y")
 NOW=$(date +"%Y-%m-%d-%T")
-BACKUPDIR="/opt/backup/home/www"
+BACKUPDIR="/media/data/backup"
 DAY=$(date +"%a")
 FULLBACKUP="Sun"
 
 # Amazon S3 storage info
-S3CONFIG="false"; # "/home/kib/.s3cfg"
-S3TARGET="s3://backup.sofasurfer.org/home"
+S3CONFIG="/home/ec2-user/.s3cfg"
+S3TARGET="s3://backup.sofasurfer.org/sofaweb/$YEAR"
 
 ### MySQL Setup ###
 MUSER="root"
-MPASS="home@sql"
+MPASS="???"
 MHOST="localhost"
 MYSQL="$(which mysql)"
 MYSQLDUMP="$(which mysqldump)"
@@ -30,13 +29,25 @@ EMAILID="webmaster@sofasurfer.ch"
 
 
 ### Check if Backup Directory Exist ###
-if [ "$DAY" = "$FULLBACKUP" ]; then
+if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; then
         BACKUP=$BACKUPDIR/$NOW-full
 else
         BACKUP=$BACKUPDIR/$NOW-incremental
 fi
 [ ! -d $BACKUP ] && mkdir -p $BACKUP || :
 
+### Start general Backup ###
+if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; then
+	for FOLDER in $DATADIRS
+	do
+    		FILE="$BACKUP/data-$(basename $FOLDER).tar.bz2"
+    		tar -jcf $FILE $FOLDER
+    		echo $FILE
+
+	done
+else
+	echo "Ignore datadir"
+fi
 
 ### Start MySQL Backup ###
 echo "Start Backup:$BACKUP"
@@ -54,12 +65,10 @@ done
 
 ### Start WWW Backup ###
 ### See if we want to make a full backup ###
-# for FOLDER in $(find . -type f -name '*_log' -print | sed 's/^\.\///')
-# for FOLDER in $(find $DIRS -maxdepth 0 -type d ); 
 for FOLDER in $WEBDIR/*;
 do
-		PATHNAME=$(basename "$FOLDER")
-        if [ "$DAY" = "$FULLBACKUP" ]; 
+	PATHNAME=$(basename "$FOLDER")
+        if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; 
         then
 
                 FILE="$BACKUP/www-$PATHNAME-full.tar.bz2"
@@ -74,29 +83,39 @@ do
         echo "Backup $FOLDER \t->\t $FILE"
 done
 
+### Start config backup ###
+
+
+
 ### delete old backup directories ###
-sudo find $BACKUPDIR -type d -mtime +7  | xargs rm -rfv;
+find "$BACKUPDIR/" -ctime +1 -delete
 
 ### Upload to S3 ###
 if [ "$S3CONFIG" = "false" ]; 
 then
 	echo "Skip s3cmd"
 else
-	sudo s3cmd sync  --config=$S3CONFIG --skip-existing $BACKUPDIR/ "$S3TARGET/$SUBDIR/"
+	
+    s3cmd sync  --config=$S3CONFIG --skip-existing "$BACKUPDIR/" "$S3TARGET/"
 
-	for i in $($FIND $HOMEDIRS/* -maxdepth 0 -type d -printf '%f\n'); do
-		sudo s3cmd sync  --config=$S3CONFIG --skip-existing $i "$S3TARGET/$i"
-	done
+    ### Delete incremental files
+    if [ "$DAY" = "$FULLBACKUP" -o "$1" == "full" ]; then
+        s3cmd --config=$S3CONFIG  --recursive --exclude "*full/*" --exclude="*webmin*" del "$S3TARGET/"       
+    fi
 fi
 
 ### Find out if ftp backup failed or not ###
 LOCATION=$(basename "$BACKUP")
+TOTALFILES=$(ls -1 $BACKUP | wc -l)
+
 if [ "$?" = "0" ]; 
 then
-        python /usr/local/bin/tweet.py "home.sofasurfer.org - BACKUP successful - Location: $LOCATION"
+        MESSAGE="home.sofasurfer.org - #backup #success - Location: $LOCATION Files: $TOTALFILES"
 else
-        python /usr/local/bin/tweet.py "home.sofasurfer.org - BACKUP FAILED - Location: $LOCATION"
+        MESSAGE="home.sofasurfer.org - #backup #FAILED - Location: $LOCATION Files: $TOTALFILES"
 fi
 
+python /usr/local/bin/tweet.py "$MESSAGE"
+#mailx -s "$MESSAGE" < /dev/null "$EMAILID"
+
 rm -f $T
-                                 
