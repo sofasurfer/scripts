@@ -6,34 +6,40 @@ SOURCEFOLDER='/Users/kbohnenblust/Downloads/Transmission/completed'
 TARGETFOLDER='/Users/kbohnenblust/Downloads/Transmission/stream'
 
 
-cd $SOURCEFOLDER
+cd "$SOURCEFOLDER"
 
 # Loop all Folders
-for dic in "$SOURCEFOLDER/*"
+for dic in *;
+# for dic in $(find $SOURCEFOLDER -type d);
 do
-    foldername=$(basename $dic)
+
+    cd "$SOURCEFOLDER"
+
+    foldername=$(basename "$dic")
     targetfolder="$TARGETFOLDER/$foldername"
 
     # Check if fodler exist
     if [ -d "$targetfolder" ]; then
         echo "Folder $targetfolder exist."
-        break
     fi
-    mkdir $targetfolder
-    echo $targetfolder
+    mkdir "$targetfolder"
+
+    echo "$dic"
+    cd "$dic"
+
 
     # Loop all Files in Fodler
-    for file in $dic/*
+    for file in *;
     do 
-        filetype=$(file -b --mime-type $file)
-        filename=$(basename $file)
+        filetype=$(file -b --mime-type "$file")
+        filename=$(basename "$file")
 
-        # Check Filetype
-        if [ $filetype = 'application/octet-stream' ]; then 
+        #Check Filetype
+        if [ $filetype = "application/octet-stream" ]; then 
             ffmpeg -i "$file" -vcodec copy -acodec copy "$targetfolder/${filename%.*}.mp4"
         fi
 
-        if [ $filetype = 'image/jpeg' ]; then 
+        if [ $filetype = "image/jpeg" ]; then 
             cp "$file" "$targetfolder/poster.jpg"
         fi
         echo " - $filename / $filetype"
