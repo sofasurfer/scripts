@@ -2,21 +2,23 @@
 # HTML5 video converter
 # ---------------------------------------------------------------------
 
-SOURCEFOLDER='/Users/kbohnenblust/Downloads/Transmission/completed'
-TARGETFOLDER='/Users/kbohnenblust/Downloads/Transmission/stream'
+SOURCEFOLDER='/media/data/stream/transmission/completed'
+TARGETFOLDER='/media/data/stream/movies'
+
 
 
 cd $SOURCEFOLDER
 
 # Loop all Folders
-for dic in "$SOURCEFOLDER/*"
+for dic in $SOURCEFOLDER/*
 do
     foldername=$(basename $dic)
     targetfolder="$TARGETFOLDER/$foldername"
 
+
     # Check if fodler exist
     if [ -d "$targetfolder" ]; then
-        echo "Folder $targetfolder exist."
+        echo "Folder [$targetfolder] exist."
         break
     fi
     mkdir $targetfolder
