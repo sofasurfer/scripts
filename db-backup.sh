@@ -5,8 +5,8 @@
 ### System Setup ###
 YEAR=$(date +"%Y")
 NOW=$(date +"%Y-%m-%d-%H%M")
-WEBDIR="/Users/kilianbohnenblust/Development/www"
-BACKUPDIR="/Users/kilianbohnenblust/Dropbox/Backup/Cubegrafik"
+WEBDIR="/Users/kilianbohnenblust/Development/www/"
+BACKUPDIR="/Users/kilianbohnenblust/Downloads/_backup/db/"
 DAY=$(date +"%a")
 FULLBACKUP="Sun"
 
@@ -22,7 +22,7 @@ GZIP="$(which gzip)"
 
 
 ### Check if Backup Directory Exist ###
-BACKUP=$BACKUPDIR/$NOW-full
+BACKUP=$BACKUPDIR$NOW-full
 [ ! -d $BACKUP ] && mkdir -p $BACKUP || :
 
 
@@ -41,17 +41,24 @@ do
 	rm $FILE
 done
 
+
+
+
 ### Start WWW Backup ###
 ### See if we want to make a full backup ###
-for FOLDER in $WEBDIR/*;
-do
-    PATHNAME=$(basename "$FOLDER")
-    FILE="$BACKUP/www-$PATHNAME-full.tar.bz2"
-    tar -jcf $FILE $FOLDER
-    echo "Backup $FOLDER \t->\t $FILE"
-done
+#for FOLDER in $WEBDIR*;
+#do
+#    PATHNAME=$(basename "$FOLDER")
+#    FILE="$BACKUP/www-$PATHNAME-full.tar.bz2"
+#    tar -jcf $FILE $FOLDER
+#    echo "Backup $FOLDER \t->\t $FILE"
+#done
 
 
+echo "Sync ToServer\n"
+rsync -rva --progress "$BACKUPDIR" /Volumes/data/_transfer/kilian/_backup/db/
+rsync -rva --progress "$WEBDIR" /Volumes/data/_transfer/kilian/_backup/www/
 
-echi "Backup done\n"
+
+echo "Backup done\n"
 
